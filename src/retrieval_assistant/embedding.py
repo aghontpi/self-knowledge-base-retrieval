@@ -34,7 +34,10 @@ class Embedder:
         if self._model is None:
             from sentence_transformers import SentenceTransformer
 
-            model = SentenceTransformer(self._domain.embedding_model)
+            model = SentenceTransformer(
+                self._domain.embedding_model,
+                trust_remote_code=self._domain.trust_remote_code,
+            )
             # Cap the input length. Long-context models (e.g. Qwen3, 32k) will
             # otherwise try to build an attention buffer for the full sequence on
             # an oversized chunk and blow up memory ("Invalid buffer size").

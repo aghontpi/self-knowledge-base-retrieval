@@ -13,7 +13,7 @@ The corpus is heterogeneous (prose **and** code), so the index is split into two
 | domain | content | model |
 |---|---|---|
 | **prose** | markdown, text, PDF, docx, CSV, config | `BAAI/bge-small-en-v1.5` (384-d) |
-| **code** | source files, notebooks | `Qwen/Qwen3-Embedding-0.6B` (1024-d) |
+| **code** | source files, notebooks | `ibm-granite/granite-embedding-311m-multilingual-r2` (768-d) |
 
 Vectors from different models aren't comparable, so they live in separate
 collections. A query is embedded with each model, searched against each
