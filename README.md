@@ -1,15 +1,20 @@
 <div align="center">
 
-# personal-retrieval-assistant
+# Self Knowledge Base Retrieval For Humans and AI
 
 Local, vector-only RAG over a mixed-format document corpus. No server, no orchestration framework, no cloud.
 
 <p>
-  <a href="https://github.com/aghontpi/self-knowledge-base-retrieval/releases"><img src="https://img.shields.io/github/v/release/aghontpi/self-knowledge-base-retrieval?include_prereleases&style=flat-square&label=github-release" alt="release"></a>
   <a href="https://github.com/aghontpi/self-knowledge-base-retrieval/blob/main/LICENSE"><img src="https://img.shields.io/github/license/aghontpi/self-knowledge-base-retrieval?style=flat-square" alt="license"></a>
 </p>
 
 </div>
+
+## Why
+
+> I have a lot of notes I maintain over the years from 2016, its a collection of different fileformats, I wanted something that can query locally and find it without doing find in files all the time, although find in files is still good, lol. 
+> 
+> I also wanted to use this for talking to local ai where those local agents can queery it (note Local!)
 
 Files are selected, parsed, chunked, embedded with local models, and stored in **[Milvus Lite](https://milvus.io/docs/milvus_lite.md)** (an embedded `.db` file). Ingestion is **convergent**: re-running it makes the index match the corpus exactly — that is the entire "update the knowledge base" story.
 
