@@ -93,6 +93,12 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_web(args: argparse.Namespace) -> int:
+    from .web import start_server
+    start_server(host=args.host, port=args.port, reload=args.reload)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pra",
@@ -116,6 +122,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_stats = sub.add_parser("stats", help="show per-collection statistics")
     p_stats.set_defaults(func=_cmd_stats)
+
+    p_web = sub.add_parser("web", help="start the web dashboard server")
+    p_web.add_argument("--host", default="127.0.0.1", help="server interface (default: 127.0.0.1)")
+    p_web.add_argument("--port", type=int, default=8000, help="server port (default: 8000)")
+    p_web.add_argument("--reload", action="store_true", help="enable live-reload mode for uvicorn")
+    p_web.set_defaults(func=_cmd_web)
 
     return parser
 

@@ -152,9 +152,10 @@ rebuild, not an update.
 
 ## Model Context Protocol (MCP) Server
 
-The Personal Retrieval Assistant includes a production-grade **Model Context Protocol (MCP)** server, allowing LLM clients (such as Claude Desktop, Cursor, or any MCP-compatible agent) to directly query and manage your local vector search database.
+The Personal Retrieval Assistant includes a production-grade **Model Context Protocol (MCP)** server. This allows LLM clients (such as Claude Desktop, Cursor, or any MCP-compatible agent) to directly query and manage your local vector search database seamlessly.
 
 ### Core Reliability Features
+
 * 🚀 **Fast-Handshake Subprocess Boot (<10ms):** Heavy deep learning models (embeddings and cross-encoders) and libraries like PyTorch are lazy-loaded only when tools are first called. This prevents connection timeouts during LLM client startup.
 * 🔒 **OS-Level Cross-Process DB Locking (`filelock`):** Milvus Lite uses an in-process database file. Simultaneous reads/writes from different LLM clients (e.g., Claude and Cursor) are serialized using an OS-level file lock to prevent database corruption.
 * 🖥️ **Apple Silicon Sandbox Safety (Strict CPU Execution):** To prevent Metal Performance Shaders (MPS) sandbox segmentation faults inside restricted IDE environments, all neural network layers strictly run on the `cpu`.
@@ -221,6 +222,105 @@ mcp dev -w src/retrieval_assistant/mcp_server.py
 ```
 
 This starts a local developer server and opens a web console allowing you to run `pra_search`, trigger `pra_ingest`, and view stats inside a GUI.
+
+---
+
+## Premium React TypeScript Web UI Dashboard & Uvicorn Backend
+
+The Personal Retrieval Assistant features a premium, clean, minimalist **React TypeScript Web UI Dashboard** served by a high-performance **FastAPI/Uvicorn backend**. This provides a complete, modern graphical interface to manage, monitor, and query your local RAG system in real-time.
+
+```
+       +--------------------------------------------+
+       |           React SPA Frontend               |
+       |  (Stats View + Ingest Logs + Search Hub)   |
+       +---------------------+----------------------+
+                             |
+                             | HTTP/JSON (REST APIs)
+                             v
+       +--------------------------------------------+
+       |           FastAPI Uvicorn Server           |
+       |  (Lazy Loading, Process Lock, Sandbox Safe)|
+       +------+------------------------------+------+
+              |                              |
+       (Prose Collection)             (Code Collection)
+  [bge-small / Milvus Lite]      [granite-embed / Milvus Lite]
+```
+
+### Core UI Dashboard Features
+
+* 📊 **Systems Health & Diagnostics Panel:** Real-time visibility into your local vector indexes, showing DB file path, active dataset paths, Milvus Lite collection keys, active embedding models, total indexed files, and exact chunk counts.
+* 🔄 **Synchronous Indexing Terminal Log:** Trigger a full convergent filesystem scan directly from the web interface. A real-time scrolling terminal logs file integrity hash recalculations, new document syncs, code modifications, and index deletions.
+* 🔍 **Semantic Search Canvas:** Execute queries directly inside the browser.
+  * **Unified Merged Ranking:** Intersect prose and code collections ranked on a single, comparable cross-encoder scale.
+  * **Domain-Grouped Mode:** View side-by-side comparative views of Prose and Code indexes ranked on their respective scales.
+  * **Interactive Parameters:** Fine-tune RAG parameters on-the-fly using a `Top-K` slider and an interactive cross-encoder reranker toggle.
+* 📄 **Sandboxed Document Preview Drawer:** Click on search results to open a modern sliding side-drawer containing full-text file contents. Previews are secured with server-side path containment guards and clamped at a `500 KB` file size limit to prevent memory bloat.
+
+### Backend Architecture
+
+The backend is built with **FastAPI** and run using the **Uvicorn** ASGI server. 
+
+* ⚡ **Lazy Loading Singleton:** Uses a custom `WebRAGManager` to defer heavy Python imports (`torch`, `sentence-transformers`, `pymilvus`) and model initializations. This ensures the web server starts instantly (~10ms) and consumes minimal baseline memory until a query is executed.
+* 🔒 **Shared SQLite File Lock:** Leverages a `filelock.FileLock` wrapper around `pra.db` with a `10.0` second fallback timeout. This serializes database reads and writes across the web dashboard and active MCP clients, ensuring zero database corruption when querying cursor/claude concurrently.
+* 🖥️ **Hardware Sandbox Safety:** Forces PyTorch layers to strictly execute on the `cpu` to prevent metal performance shaders exceptions inside sandbox runtimes.
+
+---
+
+### Setup & Launch Instructions
+
+#### 1. Compile the React Frontend Assets
+The React dashboard is written using **React 19**, **TypeScript**, and **Vite**. The production-ready compiled assets must be bundled and placed inside the backend's static directory.
+
+We use **pnpm** to manage frontend packages. Compile the bundle using the provided `Makefile` shortcut or run it manually:
+
+```bash
+# Option A: Compile via Makefile shortcut (requires pnpm)
+make web-build
+
+# Option B: Run compilation manually
+cd ui
+pnpm install
+pnpm run build
+```
+
+> [!TIP]
+> The Vite build config is pre-configured to output the compiled single-page application directly to the backend's server static directory (`src/retrieval_assistant/static/`) for immediate serving.
+
+#### 2. Launch the FastAPI Uvicorn Server
+Once compiled, start the web server from the repository root:
+
+```bash
+# Option A: Via Makefile (incorporates optimal macOS thread and runtime flags)
+make web
+
+# Option B: Directly via CLI
+source .venv/bin/activate
+pra web --host 127.0.0.1 --port 8000
+```
+
+* **Access the UI:** Open your browser and navigate to **`http://127.0.0.1:8000`**.
+* **CLI Arguments:**
+  * `--host`: Server interface (default: `127.0.0.1`)
+  * `--port`: Port number (default: `8000`)
+  * `--reload`: Enable hot-reloading for backend python code modifications.
+
+#### 3. High-Fidelity Frontend Development Mode (Hot-Reloading)
+For frontend developers modifying the dashboard UI, run both the backend server and Vite development server concurrently to enable instant Hot Module Replacement (HMR) and real-time UI reloading:
+
+```bash
+# Terminal 1: Run the backend server with hot-reload enabled
+source .venv/bin/activate
+pra web --reload
+
+# Terminal 2: Run the Vite development server
+cd ui
+pnpm run dev
+```
+
+* **Access Dev Server:** Open **`http://localhost:5173`**.
+* **API Proxying:** The Vite development server is configured with a dev-proxy that seamlessly forwards all `/api/*` endpoints to the active Uvicorn backend listening on port `8000`, bypassing CORS policies and making frontend adjustments instant.
+
+---
 
 ## Layout
 

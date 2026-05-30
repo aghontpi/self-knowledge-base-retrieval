@@ -25,6 +25,12 @@ query:  ## Run a retrieval query: make query Q="..."
 stats:  ## Show collection stats
 	$(PRA_ENV) pra stats
 
+web:  ## Launch the FastAPI web server dashboard
+	$(PRA_ENV) pra web
+
+web-build:  ## Compile React TypeScript assets
+	cd ui && source ~/.nvm/nvm.sh && nvm use 22 && pnpm run build
+
 test:  ## Run the test suite
 	$(PYTHON) -m pytest -q
 
