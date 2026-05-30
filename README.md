@@ -1,11 +1,17 @@
+<div align="center">
+
 # personal-retrieval-assistant
 
-Local, **vector-only** RAG over a mixed-format document corpus. No server, no
-orchestration framework, no cloud. Files are selected, parsed, chunked,
-embedded with local models, and stored in **[Milvus Lite](https://milvus.io/docs/milvus_lite.md)**
-(an embedded `.db` file). Ingestion is **convergent**: re-running it makes the
-index match the corpus exactly — that is the entire "update the knowledge base"
-story.
+Local, vector-only RAG over a mixed-format document corpus. No server, no orchestration framework, no cloud.
+
+<p>
+  <a href="https://github.com/aghontpi/self-knowledge-base-retrieval/releases"><img src="https://img.shields.io/github/v/release/aghontpi/self-knowledge-base-retrieval?include_prereleases&style=flat-square&label=github-release" alt="release"></a>
+  <a href="https://github.com/aghontpi/self-knowledge-base-retrieval/blob/main/LICENSE"><img src="https://img.shields.io/github/license/aghontpi/self-knowledge-base-retrieval?style=flat-square" alt="license"></a>
+</p>
+
+</div>
+
+Files are selected, parsed, chunked, embedded with local models, and stored in **[Milvus Lite](https://milvus.io/docs/milvus_lite.md)** (an embedded `.db` file). Ingestion is **convergent**: re-running it makes the index match the corpus exactly — that is the entire "update the knowledge base" story.
 
 The corpus is heterogeneous (prose **and** code), so the index is split into two
 **domains**, each with its own collection and embedding model:
@@ -152,20 +158,20 @@ rebuild, not an update.
 
 ## Model Context Protocol (MCP) Server
 
-The Personal Retrieval Assistant includes a production-grade **Model Context Protocol (MCP)** server. This allows LLM clients (such as Claude Desktop, Cursor, or any MCP-compatible agent) to directly query and manage your local vector search database seamlessly.
+The Personal Retrieval Assistant includes a **Model Context Protocol (MCP)** server. This allows LLM clients (such as Claude Desktop, Cursor, or other MCP-compatible clients) to query and manage your local vector search database.
 
-### Core Reliability Features
+### Key Features
 
-* 🚀 **Fast-Handshake Subprocess Boot (<10ms):** Heavy deep learning models (embeddings and cross-encoders) and libraries like PyTorch are lazy-loaded only when tools are first called. This prevents connection timeouts during LLM client startup.
-* 🔒 **OS-Level Cross-Process DB Locking (`filelock`):** Milvus Lite uses an in-process database file. Simultaneous reads/writes from different LLM clients (e.g., Claude and Cursor) are serialized using an OS-level file lock to prevent database corruption.
-* 🖥️ **Apple Silicon Sandbox Safety (Strict CPU Execution):** To prevent Metal Performance Shaders (MPS) sandbox segmentation faults inside restricted IDE environments, all neural network layers strictly run on the `cpu`.
-* 🛡️ **Strict Path Traversal Sandboxing:** Direct file reading via tools is protected by a path containment resolver (`secure_resolve`) that guarantees target files reside within the configured `PRA_DATA_DIR`.
+* **Fast Subprocess Boot (<10ms):** Heavy models (embeddings and cross-encoders) and libraries like PyTorch are lazy-loaded when tools are first called. This prevents connection timeouts during LLM client startup.
+* **OS-Level DB Locking (`filelock`):** Milvus Lite uses an in-process database file. Simultaneous reads and writes from different clients are serialized using an OS-level file lock to prevent database corruption.
+* **Apple Silicon Sandbox Safety (Strict CPU Execution):** Neural network layers run on the `cpu` to prevent Metal Performance Shaders (MPS) sandbox segmentation faults inside restricted environments.
+* **Path Traversal Protection:** Direct file reading is protected by a path containment resolver (`secure_resolve`) to ensure target files reside within the configured `PRA_DATA_DIR`.
 
 ---
 
 ### Exposed Tools & Resources
 
-#### 🛠️ Tools
+#### Tools
 * **`pra_search(query, top_k)`**: Semantic search across both prose and code collections, merged and re-scored with the local cross-encoder.
   * `query` *(string)*: Natural language question or search query.
   * `top_k` *(integer, optional, default: 5)*: Number of ranked results to return (clamped between `1` and `50`).
@@ -174,7 +180,7 @@ The Personal Retrieval Assistant includes a production-grade **Model Context Pro
 * **`pra_get_file(doc_id)`**: Reads the raw text content of an indexed file (clamped at `500KB` max to protect memory) with strict path containment checks.
   * `doc_id` *(string)*: Relative file path identifier (e.g., `src/utils.py`).
 
-#### 📁 Resources
+#### Resources
 * **`pra://settings`**: Exposes the active RAG configuration settings (data directory, SQLite path, chunk limits, active models) as a read-only JSON payload.
 
 ---
@@ -225,9 +231,9 @@ This starts a local developer server and opens a web console allowing you to run
 
 ---
 
-## Premium React TypeScript Web UI Dashboard & Uvicorn Backend
+## React Web UI & FastAPI Backend
 
-The Personal Retrieval Assistant features a premium, clean, minimalist **React TypeScript Web UI Dashboard** served by a high-performance **FastAPI/Uvicorn backend**. This provides a complete, modern graphical interface to manage, monitor, and query your local RAG system in real-time.
+The Personal Retrieval Assistant includes a **React TypeScript Web UI Dashboard** served by a **FastAPI backend**. This provides a graphical interface to query and monitor your local RAG system.
 
 ```
        +--------------------------------------------+
@@ -246,30 +252,30 @@ The Personal Retrieval Assistant features a premium, clean, minimalist **React T
   [bge-small / Milvus Lite]      [granite-embed / Milvus Lite]
 ```
 
-### Core UI Dashboard Features
+### UI Dashboard Features
 
-* 📊 **Systems Health & Diagnostics Panel:** Real-time visibility into your local vector indexes, showing DB file path, active dataset paths, Milvus Lite collection keys, active embedding models, total indexed files, and exact chunk counts.
-* 🔄 **Synchronous Indexing Terminal Log:** Trigger a full convergent filesystem scan directly from the web interface. A real-time scrolling terminal logs file integrity hash recalculations, new document syncs, code modifications, and index deletions.
-* 🔍 **Semantic Search Canvas:** Execute queries directly inside the browser.
-  * **Unified Merged Ranking:** Intersect prose and code collections ranked on a single, comparable cross-encoder scale.
-  * **Domain-Grouped Mode:** View side-by-side comparative views of Prose and Code indexes ranked on their respective scales.
-  * **Interactive Parameters:** Fine-tune RAG parameters on-the-fly using a `Top-K` slider and an interactive cross-encoder reranker toggle.
-* 📄 **Sandboxed Document Preview Drawer:** Click on search results to open a modern sliding side-drawer containing full-text file contents. Previews are secured with server-side path containment guards and clamped at a `500 KB` file size limit to prevent memory bloat.
+* **System Status & Diagnostics:** View local vector index details, including the database file path, data directories, active embedding models, total indexed files, and chunk counts.
+* **Indexing Log:** Trigger a sync directly from the web interface and view real-time log output as files are processed.
+* **Semantic Search:** Query the system directly from the browser.
+  * **Unified Ranking:** View combined prose and code results ranked using a cross-encoder.
+  * **Domain-Grouped Mode:** View prose and code results side-by-side on their respective scales.
+  * **Interactive Parameters:** Adjust Top-K and toggle the cross-encoder reranker on-the-fly.
+* **Document Preview:** Click search results to open a side drawer showing full-text file contents. Previews are restricted to a maximum size of 500 KB to limit memory usage and are protected by path containment guards.
 
 ### Backend Architecture
 
-The backend is built with **FastAPI** and run using the **Uvicorn** ASGI server. 
+The backend is built with **FastAPI** and served using **Uvicorn**.
 
-* ⚡ **Lazy Loading Singleton:** Uses a custom `WebRAGManager` to defer heavy Python imports (`torch`, `sentence-transformers`, `pymilvus`) and model initializations. This ensures the web server starts instantly (~10ms) and consumes minimal baseline memory until a query is executed.
-* 🔒 **Shared SQLite File Lock:** Leverages a `filelock.FileLock` wrapper around `pra.db` with a `10.0` second fallback timeout. This serializes database reads and writes across the web dashboard and active MCP clients, ensuring zero database corruption when querying cursor/claude concurrently.
-* 🖥️ **Hardware Sandbox Safety:** Forces PyTorch layers to strictly execute on the `cpu` to prevent metal performance shaders exceptions inside sandbox runtimes.
+* **Lazy Loading:** Uses a `WebRAGManager` to defer heavy Python imports (`torch`, `sentence-transformers`, `pymilvus`) and model initializations. This keeps startup time under ~10ms and reduces memory usage until a query is executed.
+* **Shared File Lock:** Uses `filelock` around `pra.db` with a timeout. This serializes database reads and writes across the web dashboard and active MCP clients to prevent database corruption.
+* **Hardware Compatibility:** Forces PyTorch layers to run on the `cpu` to avoid Metal Performance Shaders (MPS) sandbox segmentation faults inside restricted environments.
 
 ---
 
 ### Setup & Launch Instructions
 
 #### 1. Compile the React Frontend Assets
-The React dashboard is written using **React 19**, **TypeScript**, and **Vite**. The production-ready compiled assets must be bundled and placed inside the backend's static directory.
+The React dashboard is written using **React 19**, **TypeScript**, and **Vite**. The compiled assets must be bundled and placed inside the backend's static directory.
 
 We use **pnpm** to manage frontend packages. Compile the bundle using the provided `Makefile` shortcut or run it manually:
 
@@ -284,7 +290,7 @@ pnpm run build
 ```
 
 > [!TIP]
-> The Vite build config is pre-configured to output the compiled single-page application directly to the backend's server static directory (`src/retrieval_assistant/static/`) for immediate serving.
+> The Vite build config is set up to output the compiled assets directly to the backend's static directory (`src/retrieval_assistant/static/`).
 
 #### 2. Launch the FastAPI Uvicorn Server
 Once compiled, start the web server from the repository root:
@@ -304,8 +310,8 @@ pra web --host 127.0.0.1 --port 8000
   * `--port`: Port number (default: `8000`)
   * `--reload`: Enable hot-reloading for backend python code modifications.
 
-#### 3. High-Fidelity Frontend Development Mode (Hot-Reloading)
-For frontend developers modifying the dashboard UI, run both the backend server and Vite development server concurrently to enable instant Hot Module Replacement (HMR) and real-time UI reloading:
+#### 3. Frontend Development Mode (Hot-Reloading)
+For frontend developers modifying the dashboard UI, run both the backend server and Vite development server concurrently to enable Hot Module Replacement (HMR) and live reloading:
 
 ```bash
 # Terminal 1: Run the backend server with hot-reload enabled
@@ -318,7 +324,7 @@ pnpm run dev
 ```
 
 * **Access Dev Server:** Open **`http://localhost:5173`**.
-* **API Proxying:** The Vite development server is configured with a dev-proxy that seamlessly forwards all `/api/*` endpoints to the active Uvicorn backend listening on port `8000`, bypassing CORS policies and making frontend adjustments instant.
+* **API Proxying:** The Vite development server is configured with a dev-proxy that forwards all `/api/*` endpoints to the active Uvicorn backend listening on port `8000` to bypass CORS policies.
 
 ---
 
@@ -336,7 +342,7 @@ src/retrieval_assistant/
   ingest.py     convergent sync across both domains
   search.py     query both -> grouped / merged / reranked results
   rerank.py     cross-encoder second stage (one scale across domains)
-  mcp_server.py FastMCP-powered stdio production MCP server
+  mcp_server.py FastMCP-powered stdio MCP server
   cli.py        argparse: ingest / query / stats
 ```
 
@@ -345,14 +351,6 @@ src/retrieval_assistant/
 Corpus, the Milvus `.db`, and `.env` are gitignored. The `.db` records local
 absolute paths but never reaches the repo. Nothing personal (name, email) appears
 in `LICENSE` or `pyproject.toml`.
-
-## What's next (not built yet)
-
-- An answer stage (local model via Ollama, or an MCP server wrapping `search()`).
-- Optional upgrades once you eyeball results: tree-sitter for non-Python
-  structural chunking, OCR for scanned PDFs, and a stronger reranker
-  (`BAAI/bge-reranker-base`) via `PRA_RERANK_MODEL` if the default isn't sharp
-  enough.
 
 ## License
 
