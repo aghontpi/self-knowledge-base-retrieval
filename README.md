@@ -150,6 +150,78 @@ To change a domain's embedding model, drop that collection (or delete the `.db`)
 and re-ingest — vectors from different models aren't comparable, so it's a
 rebuild, not an update.
 
+## Model Context Protocol (MCP) Server
+
+The Personal Retrieval Assistant includes a production-grade **Model Context Protocol (MCP)** server, allowing LLM clients (such as Claude Desktop, Cursor, or any MCP-compatible agent) to directly query and manage your local vector search database.
+
+### Core Reliability Features
+* 🚀 **Fast-Handshake Subprocess Boot (<10ms):** Heavy deep learning models (embeddings and cross-encoders) and libraries like PyTorch are lazy-loaded only when tools are first called. This prevents connection timeouts during LLM client startup.
+* 🔒 **OS-Level Cross-Process DB Locking (`filelock`):** Milvus Lite uses an in-process database file. Simultaneous reads/writes from different LLM clients (e.g., Claude and Cursor) are serialized using an OS-level file lock to prevent database corruption.
+* 🖥️ **Apple Silicon Sandbox Safety (Strict CPU Execution):** To prevent Metal Performance Shaders (MPS) sandbox segmentation faults inside restricted IDE environments, all neural network layers strictly run on the `cpu`.
+* 🛡️ **Strict Path Traversal Sandboxing:** Direct file reading via tools is protected by a path containment resolver (`secure_resolve`) that guarantees target files reside within the configured `PRA_DATA_DIR`.
+
+---
+
+### Exposed Tools & Resources
+
+#### 🛠️ Tools
+* **`pra_search(query, top_k)`**: Semantic search across both prose and code collections, merged and re-scored with the local cross-encoder.
+  * `query` *(string)*: Natural language question or search query.
+  * `top_k` *(integer, optional, default: 5)*: Number of ranked results to return (clamped between `1` and `50`).
+* **`pra_ingest()`**: Scans your active corpus directory, calculates SHA256 hashes, and converges the local database index to match the filesystem.
+* **`pra_stats()`**: Returns diagnostic database statistics, active models, collection names, and total chunk counts.
+* **`pra_get_file(doc_id)`**: Reads the raw text content of an indexed file (clamped at `500KB` max to protect memory) with strict path containment checks.
+  * `doc_id` *(string)*: Relative file path identifier (e.g., `src/utils.py`).
+
+#### 📁 Resources
+* **`pra://settings`**: Exposes the active RAG configuration settings (data directory, SQLite path, chunk limits, active models) as a read-only JSON payload.
+
+---
+
+### Integration & Setup
+
+#### 1. Claude Desktop Configuration
+To register the assistant as a tool provider in **Claude Desktop**, add the following block to your configuration file:
+
+* **File Path:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "personal-retrieval-assistant": {
+      "command": "/path/to/personal-retrieval-assistant/.venv/bin/python",
+      "args": [
+        "-m",
+        "retrieval_assistant.mcp_server"
+      ],
+      "env": {
+        "PRA_DATA_DIR": "/path/to/your/corpus",
+        "KMP_DUPLICATE_LIB_OK": "TRUE",
+        "OMP_NUM_THREADS": "1"
+      }
+    }
+  }
+}
+```
+
+> [!NOTE]
+> * Replace `/path/to/personal-retrieval-assistant` with the absolute path to your cloned repository.
+> * Replace `/path/to/your/corpus` with the directory you want the assistant to index and search.
+
+#### 2. Interactive Testing & Local Debugging
+You can interactively test, trace, and execute all the tools and resources using the official MCP Developer Tools (`mcp dev`) or the MCP Inspector.
+
+**Using FastMCP's Built-in Inspector:**
+```bash
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Launch the interactive web inspector
+mcp dev -w src/retrieval_assistant/mcp_server.py
+```
+
+This starts a local developer server and opens a web console allowing you to run `pra_search`, trigger `pra_ingest`, and view stats inside a GUI.
+
 ## Layout
 
 ```
@@ -164,6 +236,7 @@ src/retrieval_assistant/
   ingest.py     convergent sync across both domains
   search.py     query both -> grouped / merged / reranked results
   rerank.py     cross-encoder second stage (one scale across domains)
+  mcp_server.py FastMCP-powered stdio production MCP server
   cli.py        argparse: ingest / query / stats
 ```
 
