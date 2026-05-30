@@ -24,6 +24,9 @@ dependencies = [
     "python-docx>=1.1",       # .docx parsing
     "numpy>=1.24",
     "python-dotenv>=1.0",     # loads .env if present
+    "filelock>=3.12.0",       # handles cross-process DB SQLite concurrency
+    "mcp>=1.0.0",
+    "fastmcp>=0.1.0",
 ]
 
 [project.optional-dependencies]
