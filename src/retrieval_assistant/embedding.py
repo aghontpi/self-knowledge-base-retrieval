@@ -51,6 +51,7 @@ class Embedder:
         return np.asarray(
             model.encode(
                 texts,
+                batch_size=self._domain.encode_batch_size,
                 normalize_embeddings=True,
                 convert_to_numpy=True,
                 show_progress_bar=len(texts) > 64,

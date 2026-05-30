@@ -58,6 +58,7 @@ class DomainConfig:
     embedding_dim: int
     query_prefix: str = ""
     max_seq_length: int = 512  # cap input tokens; guards long-context models from OOM
+    encode_batch_size: int = 16  # chunks per forward pass; lower = less peak memory
 
 
 @dataclass(frozen=True)
@@ -80,11 +81,14 @@ class Settings:
             collection=os.getenv("PRA_CODE_COLLECTION", "code"),
             # Default: Qwen3-Embedding-0.6B (June 2025, Qwen3 base, dim 1024,
             # sentence-transformers native, asymmetric query instruction).
-            # Lighter alternative: flax st-codesearch-distilroberta-base (dim 768,
-            # no query prefix) — set PRA_CODE_MODEL/PRA_CODE_DIM and PRA_CODE_PREFIX="".
+            # Heavier on RAM (a small encode_batch_size keeps peak ~3-4GB on a
+            # 16GB machine). Lighter alternative: set PRA_CODE_MODEL to
+            # flax-sentence-embeddings/st-codesearch-distilroberta-base with
+            # PRA_CODE_DIM=768 and PRA_CODE_PREFIX="".
             embedding_model=os.getenv("PRA_CODE_MODEL", "Qwen/Qwen3-Embedding-0.6B"),
             embedding_dim=int(os.getenv("PRA_CODE_DIM", "1024")),
             query_prefix=os.getenv("PRA_CODE_PREFIX", QWEN3_QUERY_PREFIX),
+            encode_batch_size=int(os.getenv("PRA_CODE_BATCH", "8")),
         )
     )
 
