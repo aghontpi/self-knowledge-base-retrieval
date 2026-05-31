@@ -1,0 +1,172 @@
+# personal-retrieval-assistant
+
+Local, **vector-only** RAG over a mixed-format document corpus. No server, no
+orchestration framework, no cloud. Files are selected, parsed, chunked,
+embedded with local models, and stored in **[Milvus Lite](https://milvus.io/docs/milvus_lite.md)**
+(an embedded `.db` file). Ingestion is **convergent**: re-running it makes the
+index match the corpus exactly — that is the entire "update the knowledge base"
+story.
+
+The corpus is heterogeneous (prose **and** code), so the index is split into two
+**domains**, each with its own collection and embedding model:
+
+| domain | content | model |
+|---|---|---|
+| **prose** | markdown, text, PDF, docx, CSV, config | `BAAI/bge-small-en-v1.5` (384-d) |
+| **code** | source files, notebooks | `flax-sentence-embeddings/st-codesearch-distilroberta-base` (768-d) |
+
+Vectors from different models aren't comparable, so they live in separate
+collections. A query is embedded with each model, searched against each
+collection, and the hits are merged.
+
+Retrieval is built and verified *first* — no answer-generating LLM is wired in
+yet. Eyeball the retrieved chunks before trusting generation on top of them.
+
+## Pipeline
+
+```mermaid
+flowchart TB
+    A[data dir / git repo] --> D[discover]
+    subgraph D [file selection]
+        direction TB
+        D1[git ls-files<br/>tracked only] --> D2[route by name<br/>domain + kind]
+        D2 --> D3[size cap +<br/>binary sniff]
+    end
+    D --> R{route.domain}
+
+    R -->|prose| P[parse: pdf/docx/md/csv/text]
+    R -->|code| C[parse: source / notebook]
+
+    P --> PC[chunk: char window+overlap<br/>· rows for CSV · headings for md]
+    C --> CC[chunk: Python AST by def/class<br/>· line window for other langs]
+
+    PC --> PE[embed: bge-small] --> PS[(prose collection)]
+    CC --> CE[embed: code model] --> CS[(code collection)]
+
+    Q[query] --> QE[embed with each model]
+    QE --> PS
+    QE --> CS
+    PS --> M[merge by score, tag source]
+    CS --> M
+    M --> H[ranked chunks]
+```
+
+## File selection — the part that matters for a messy corpus
+
+Three gates, cheapest first (see [discovery.py](src/retrieval_assistant/discovery.py)
+and [routing.py](src/retrieval_assistant/routing.py)):
+
+1. **Listing** — if the data dir is a **git repo**, only `git ls-files` (tracked)
+   files are considered, which excludes `node_modules`, virtualenvs, build output,
+   and anything gitignored for free. Set `PRA_USE_GIT=0` to walk the tree instead.
+   > **Note:** with git mode on, *untracked* files (e.g. PDFs you never committed)
+   > are not indexed. Commit them or set `PRA_USE_GIT=0`.
+2. **Routing** — a file maps to a domain+kind by name, or is skipped. Skipped:
+   binaries/archives/images/keys, editor swap files, backup-wrapped names
+   (`5.py.save`, `81.txt.completed`), IDE dirs (`.idea`, `.vscode`), `.gitmodules`,
+   and extension-less files.
+3. **Content guards** — a **size cap** (`PRA_MAX_FILE_MB`, default 1 MB — drops
+   data dumps and DB blobs like a 900 MB `.db2`) and a **binary sniff** (null byte
+   / invalid UTF-8 in the first 8 KB — catches *mislabeled* binaries regardless of
+   extension).
+
+## Chunking — per content type
+
+| content | strategy | locator |
+|---|---|---|
+| prose (text/md/pdf/docx) | character window + overlap (`PRA_CHUNK_SIZE`/`PRA_CHUNK_OVERLAP`) | `p.3`, `¶7`, heading |
+| Python code | **AST** — one chunk per function / class (+ module preamble) | `L12-40` |
+| other code | line window + overlap (`PRA_CODE_MAX_LINES`/`PRA_CODE_OVERLAP_LINES`) | `L1-80` |
+| CSV / tabular | one row → one chunk (`col: value | col: value`) | `row.5` |
+| notebooks | per cell (code + markdown sources) | `cell.3[code]` |
+
+## How it stays correct
+
+- **Convergent sync, not append.** Every chunk row stores `doc_id` (path relative
+  to the data dir) and `file_hash` (sha256). Each ingest diffs the filesystem
+  against stored hashes *per collection*: new → insert, changed → delete+reinsert,
+  removed → delete. Re-running converges each collection to the corpus.
+- **Deterministic primary key:** `sha1(f"{doc_id}::{chunk_index}")` (not auto-id),
+  so an upsert overwrites a chunk in place.
+- **One model per collection.** The model name is stored per row; ingest refuses
+  to mix models in a collection. Changing a domain's model = rebuild that
+  collection.
+- **Cosine + AUTOINDEX** matched to L2-normalized embeddings.
+
+## Install
+
+Requires **Python ≥ 3.10**.
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+make install          # pip install -e ".[dev]"
+cp .env.example .env  # optional; point PRA_DATA_DIR at your corpus
+```
+
+First ingest/query downloads the two embedding models to your local Hugging
+Face cache.
+
+## Usage
+
+```bash
+# Point at a corpus (a folder, ideally a git repo)
+export PRA_DATA_DIR=/path/to/your/repo
+
+make ingest                 # converge both collections;  pra ingest -v  lists files
+make query Q="how is retry implemented?"
+pra query "..." -k 8        # override top-k
+make stats                  # per-collection document/chunk counts
+```
+
+Query output is tagged by domain:
+
+```
+#1  [code]  score=0.71  utils/retry.py (L20-58)
+        def with_retry(fn, attempts=3): ...
+#2  [prose] score=0.66  README.md (Retries)
+        Requests are retried with exponential backoff …
+```
+
+> Cross-model scores aren't strictly comparable (a code-model 0.7 ≠ a bge 0.7).
+> The merge sorts by raw score as a pragmatic default; the `[source]` tag shows
+> which model ranked each hit.
+
+## Updating the knowledge base
+
+There is no separate "update" step — **just run `pra ingest` again.** Add, edit,
+or delete files in the corpus and re-ingest; each collection converges to match.
+To change a domain's embedding model, drop that collection (or delete the `.db`)
+and re-ingest — vectors from different models aren't comparable, so it's a
+rebuild, not an update.
+
+## Layout
+
+```
+src/retrieval_assistant/
+  config.py     env-backed Settings + per-domain config (prose/code)
+  routing.py    file -> domain/kind, or skip
+  discovery.py  git listing + size cap + binary sniff
+  parsing.py    parse_file(path, kind) -> list[Block(text, locator)]
+  chunking.py   per-kind chunkers (char window / AST / line window / rows)
+  embedding.py  Embedder per domain (model + optional query prefix), normalized
+  store.py      Milvus Lite wrapper, one per collection
+  ingest.py     convergent sync across both domains
+  search.py     embed query per model -> search both -> merge
+  cli.py        argparse: ingest / query / stats
+```
+
+## Privacy & git hygiene
+
+Your corpus, the Milvus `.db`, and `.env` are gitignored. The `.db` records local
+absolute paths but never reaches the repo. Nothing personal (name, email) appears
+in `LICENSE` or `pyproject.toml`.
+
+## What's next (not built yet)
+
+- An answer stage (local model via Ollama, or an MCP server wrapping `search()`).
+- Optional upgrades once you eyeball results: tree-sitter for non-Python
+  structural chunking, OCR for scanned PDFs, a reranker over merged hits.
+
+## License
+
+MIT © 2026 aghontpi

@@ -1,0 +1,36 @@
+# --- Corpus & local index (never commit personal documents) ---
+data/*
+!data/.gitkeep
+*.db
+*.db.lock
+
+# --- Secrets / local config ---
+.env
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Model / HF caches (in case they land in-tree) ---
+.cache/
+**/.cache/
+models/
+*.safetensors
+*.onnx
+
+# --- OS / editor noise ---
+.DS_Store
+.idea/
+.vscode/

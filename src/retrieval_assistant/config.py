@@ -1,0 +1,124 @@
+"""Environment-backed configuration.
+
+The corpus is heterogeneous (prose + code), so the index is split into two
+*domains*, each with its own Milvus collection and embedding model:
+
+* **prose** — markdown, text, PDF, docx, CSV/config -> ``bge-small`` (English)
+* **code**  — source files & notebooks -> a code-trained embedding model
+
+Vectors from different models are not comparable, so they must live in separate
+collections. :mod:`retrieval_assistant.ingest` routes each file to exactly one
+domain; :mod:`retrieval_assistant.search` queries both and merges.
+
+All paths default to locations relative to the repo root. A ``.env`` file at the
+repo root is loaded automatically if present (it is gitignored).
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+try:  # optional convenience; absence must not break anything
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
+
+# repo root = .../personal-retrieval-assistant
+#   this file: <root>/src/retrieval_assistant/config.py
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+if load_dotenv is not None:
+    load_dotenv(REPO_ROOT / ".env")
+
+# bge models expect this instruction prefix on the *query* side only. The code
+# model is symmetric and takes no prefix.
+BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
+
+def _resolve(path_str: str) -> Path:
+    """Resolve a config path against the repo root unless it is absolute."""
+    p = Path(path_str).expanduser()
+    return p if p.is_absolute() else (REPO_ROOT / p)
+
+
+@dataclass(frozen=True)
+class DomainConfig:
+    """One content domain: its collection, embedding model, and query prefix."""
+
+    key: str
+    collection: str
+    embedding_model: str
+    embedding_dim: int
+    query_prefix: str = ""
+
+
+@dataclass(frozen=True)
+class Settings:
+    data_dir: Path = field(default_factory=lambda: _resolve(os.getenv("PRA_DATA_DIR", "data")))
+    db_path: Path = field(default_factory=lambda: _resolve(os.getenv("PRA_DB_PATH", "pra.db")))
+
+    prose: DomainConfig = field(
+        default_factory=lambda: DomainConfig(
+            key="prose",
+            collection=os.getenv("PRA_PROSE_COLLECTION", "prose"),
+            embedding_model=os.getenv("PRA_PROSE_MODEL", "BAAI/bge-small-en-v1.5"),
+            embedding_dim=int(os.getenv("PRA_PROSE_DIM", "384")),
+            query_prefix=BGE_QUERY_PREFIX,
+        )
+    )
+    code: DomainConfig = field(
+        default_factory=lambda: DomainConfig(
+            key="code",
+            collection=os.getenv("PRA_CODE_COLLECTION", "code"),
+            embedding_model=os.getenv(
+                "PRA_CODE_MODEL", "flax-sentence-embeddings/st-codesearch-distilroberta-base"
+            ),
+            embedding_dim=int(os.getenv("PRA_CODE_DIM", "768")),
+            query_prefix="",
+        )
+    )
+
+    # Prose chunking (character window + overlap).
+    chunk_size: int = field(default_factory=lambda: int(os.getenv("PRA_CHUNK_SIZE", "1000")))
+    chunk_overlap: int = field(default_factory=lambda: int(os.getenv("PRA_CHUNK_OVERLAP", "150")))
+
+    # Code chunking (line window + overlap, used as fallback / for non-Python).
+    code_max_lines: int = field(default_factory=lambda: int(os.getenv("PRA_CODE_MAX_LINES", "80")))
+    code_overlap_lines: int = field(
+        default_factory=lambda: int(os.getenv("PRA_CODE_OVERLAP_LINES", "10"))
+    )
+
+    # File-selection guards.
+    max_file_bytes: int = field(
+        default_factory=lambda: int(float(os.getenv("PRA_MAX_FILE_MB", "1")) * 1024 * 1024)
+    )
+    use_git: bool = field(
+        default_factory=lambda: os.getenv("PRA_USE_GIT", "1").lower() not in ("0", "false", "no")
+    )
+
+    top_k: int = field(default_factory=lambda: int(os.getenv("PRA_TOP_K", "5")))
+
+    def __post_init__(self) -> None:
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({self.chunk_overlap}) must be smaller than "
+                f"chunk_size ({self.chunk_size})."
+            )
+        if self.code_overlap_lines >= self.code_max_lines:
+            raise ValueError("code_overlap_lines must be smaller than code_max_lines")
+
+    def domains(self) -> list[DomainConfig]:
+        return [self.prose, self.code]
+
+    def domain(self, key: str) -> DomainConfig:
+        for d in self.domains():
+            if d.key == key:
+                return d
+        raise KeyError(key)
+
+
+def load_settings() -> Settings:
+    """Build a fresh Settings snapshot from the current environment."""
+    return Settings()

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "personal-retrieval-assistant"
+version = "0.1.0"
+description = "Local, vector-only RAG over a mixed-format document corpus (Milvus Lite + local bge embeddings)."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "aghontpi" }]
+keywords = ["rag", "retrieval", "milvus", "embeddings", "local", "vector-search"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Text Processing :: Indexing",
+]
+dependencies = [
+    "pymilvus>=2.4",          # bundles milvus-lite on macOS/Linux
+    "sentence-transformers>=2.6",
+    "pymupdf>=1.24",          # PDF parsing (imported as `fitz`)
+    "python-docx>=1.1",       # .docx parsing
+    "numpy>=1.24",
+    "python-dotenv>=1.0",     # loads .env if present
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+pra = "retrieval_assistant.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/retrieval_assistant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
