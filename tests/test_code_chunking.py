@@ -50,6 +50,29 @@ def test_python_locators_are_line_ranges():
     assert all(c.locator.startswith("L") for c in chunks)
 
 
+def test_leading_comment_attaches_to_next_def():
+    src = (
+        "import os\n"
+        "\n"
+        "# iterative\n"
+        "def foo():\n"
+        "    return 1\n"
+        "\n"
+        "# recursive\n"
+        "def bar():\n"
+        "    return bar()\n"
+    )
+    chunks = _code(src, ".py")
+    # The label must live in the same chunk as the function it describes,
+    # not as an orphan chunk — so searching the label returns the function.
+    foo = next(c for c in chunks if "def foo" in c.text)
+    bar = next(c for c in chunks if "def bar" in c.text)
+    assert "# iterative" in foo.text
+    assert "# recursive" in bar.text
+    # No chunk is a bare comment with no code.
+    assert not any(c.text.strip().startswith("#") and "def " not in c.text for c in chunks)
+
+
 def test_invalid_python_falls_back_to_line_window():
     broken = "def f(:\n  this is ( not python\n" + "x = 1\n" * 5
     chunks = _code(broken, ".py")

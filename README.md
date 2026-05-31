@@ -13,7 +13,7 @@ The corpus is heterogeneous (prose **and** code), so the index is split into two
 | domain | content | model |
 |---|---|---|
 | **prose** | markdown, text, PDF, docx, CSV, config | `BAAI/bge-small-en-v1.5` (384-d) |
-| **code** | source files, notebooks | `flax-sentence-embeddings/st-codesearch-distilroberta-base` (768-d) |
+| **code** | source files, notebooks | `Qwen/Qwen3-Embedding-0.6B` (1024-d) |
 
 Vectors from different models aren't comparable, so they live in separate
 collections. A query is embedded with each model, searched against each
@@ -169,7 +169,7 @@ src/retrieval_assistant/
 
 ## Privacy & git hygiene
 
-Your corpus, the Milvus `.db`, and `.env` are gitignored. The `.db` records local
+Corpus, the Milvus `.db`, and `.env` are gitignored. The `.db` records local
 absolute paths but never reaches the repo. Nothing personal (name, email) appears
 in `LICENSE` or `pyproject.toml`.
 

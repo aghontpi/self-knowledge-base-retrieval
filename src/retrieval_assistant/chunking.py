@@ -107,10 +107,44 @@ def _line_count(source: str) -> int:
     return source.count("\n") + 1
 
 
+def _node_start(node) -> int:
+    """First line of a def/class, counting decorators (which sit above it)."""
+    decorators = getattr(node, "decorator_list", None)
+    if decorators:
+        return min(d.lineno for d in decorators)
+    return node.lineno
+
+
+def _attach_split(lines: list[str], lo: int, hi: int) -> tuple[int, int, bool]:
+    """Split a gap [lo,hi] into (code_end, comment_start, saw_comment).
+
+    Walking up from ``hi``, consume the trailing run of blank/comment lines. If
+    that run contains a comment, it belongs to the def *below* the gap (a label
+    like ``# recursive`` describing the next function), so it should attach there
+    rather than dangle as its own chunk. ``code_end`` is the last line of the
+    preceding real code (lo-1 if none); ``comment_start`` is the first line of
+    the trailing block.
+    """
+    i = hi
+    saw_comment = False
+    while i >= lo:
+        stripped = lines[i - 1].strip()
+        if stripped == "":
+            i -= 1
+        elif stripped.startswith("#"):
+            saw_comment = True
+            i -= 1
+        else:
+            break
+    return i, i + 1, saw_comment
+
+
 def _python_spans(source: str) -> list[tuple[int, int]] | None:
     """Top-level (start,end) line spans: module preamble + each def/class.
 
-    Returns None if the source does not parse, so the caller falls back.
+    A comment block immediately above a def/class is folded into that def's span
+    (so its label is embedded *with* the code, not as an orphan chunk). Returns
+    None if the source does not parse, so the caller falls back.
     """
     try:
         tree = ast.parse(source)
@@ -118,6 +152,7 @@ def _python_spans(source: str) -> list[tuple[int, int]] | None:
         return None
 
     total = _line_count(source)
+    lines = source.splitlines()
     tops = [
         node
         for node in tree.body
@@ -129,12 +164,21 @@ def _python_spans(source: str) -> list[tuple[int, int]] | None:
     spans: list[tuple[int, int]] = []
     cursor = 1
     for node in tops:
-        start = node.lineno
-        end = getattr(node, "end_lineno", start) or start
-        # Anything between the previous span and this def (imports, top code).
+        start = _node_start(node)
+        end = getattr(node, "end_lineno", node.lineno) or node.lineno
+        def_start = start
         if start > cursor:
-            spans.append((cursor, start - 1))
-        spans.append((start, end))
+            code_end, comment_start, saw_comment = _attach_split(lines, cursor, start - 1)
+            if saw_comment:
+                # Real code before the comment block keeps its own span...
+                if code_end >= cursor:
+                    spans.append((cursor, code_end))
+                # ...and the comment block attaches to this def.
+                def_start = comment_start
+            else:
+                # No trailing comment: emit the gap as-is (imports, top-level code).
+                spans.append((cursor, start - 1))
+        spans.append((def_start, end))
         cursor = end + 1
     if cursor <= total:
         spans.append((cursor, total))

@@ -32,9 +32,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if load_dotenv is not None:
     load_dotenv(REPO_ROOT / ".env")
 
-# bge models expect this instruction prefix on the *query* side only. The code
-# model is symmetric and takes no prefix.
+# bge (prose) expects this instruction prefix on the *query* side only.
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
+# Qwen3-Embedding (code) is also asymmetric: an instruction on the query side,
+# nothing on the document side. This is the model's own recommended prompt.
+QWEN3_QUERY_PREFIX = (
+    "Instruct: Given a question, retrieve code or documentation that answers it\nQuery:"
+)
 
 
 def _resolve(path_str: str) -> Path:
@@ -72,11 +77,13 @@ class Settings:
         default_factory=lambda: DomainConfig(
             key="code",
             collection=os.getenv("PRA_CODE_COLLECTION", "code"),
-            embedding_model=os.getenv(
-                "PRA_CODE_MODEL", "flax-sentence-embeddings/st-codesearch-distilroberta-base"
-            ),
-            embedding_dim=int(os.getenv("PRA_CODE_DIM", "768")),
-            query_prefix="",
+            # Default: Qwen3-Embedding-0.6B (June 2025, Qwen3 base, dim 1024,
+            # sentence-transformers native, asymmetric query instruction).
+            # Lighter alternative: flax st-codesearch-distilroberta-base (dim 768,
+            # no query prefix) — set PRA_CODE_MODEL/PRA_CODE_DIM and PRA_CODE_PREFIX="".
+            embedding_model=os.getenv("PRA_CODE_MODEL", "Qwen/Qwen3-Embedding-0.6B"),
+            embedding_dim=int(os.getenv("PRA_CODE_DIM", "1024")),
+            query_prefix=os.getenv("PRA_CODE_PREFIX", QWEN3_QUERY_PREFIX),
         )
     )
 
