@@ -8,7 +8,7 @@ import textwrap
 
 from .config import load_settings
 from .ingest import EmbeddingModelMismatch, ingest
-from .search import search_grouped
+from .search import search_grouped, search_reranked
 from .store import MilvusStore
 
 
@@ -33,27 +33,44 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_hit(rank: int, hit, show_source: bool) -> None:
+    snippet = textwrap.shorten(" ".join(hit.text.split()), width=280, placeholder=" …")
+    src = f"[{hit.source}] " if show_source else ""
+    if hit.rerank_score is not None:
+        score = f"rerank={hit.rerank_score:.3f} (cos={hit.score:.3f})"
+    else:
+        score = f"score={hit.score:.4f}"
+    print(f"#{rank}  {src}{score}  {hit.doc_id} ({hit.locator})")
+    print(textwrap.indent(snippet, "    "))
+    print()
+
+
 def _cmd_query(args: argparse.Namespace) -> int:
     settings = load_settings()
-    grouped = search_grouped(args.query, settings, top_k=args.top_k)
+    use_rerank = settings.rerank_enabled and not args.no_rerank
 
-    # Results are grouped by domain because cross-model scores are not
-    # comparable — see search.py. Each section is ranked on its own scale.
-    total = sum(len(hits) for _, hits in grouped)
-    if total == 0:
-        print("no results (is the index empty? run `pra ingest`)")
+    if use_rerank:
+        # Cross-encoder puts code and prose on one scale → a single ranked list.
+        hits = search_reranked(args.query, settings, top_k=args.top_k)
+        if not hits:
+            print("no results (is the index empty? run `pra ingest`)")
+            return 0
+        for rank, hit in enumerate(hits, start=1):
+            _print_hit(rank, hit, show_source=True)
         return 0
 
+    # Fallback: group by domain, each ranked on its own (incomparable) scale.
+    grouped = search_grouped(args.query, settings, top_k=args.top_k)
+    if sum(len(hits) for _, hits in grouped) == 0:
+        print("no results (is the index empty? run `pra ingest`)")
+        return 0
     for domain_key, hits in grouped:
         print(f"=== {domain_key} ===")
         if not hits:
             print("    (no matches)\n")
             continue
         for rank, hit in enumerate(hits, start=1):
-            snippet = textwrap.shorten(" ".join(hit.text.split()), width=280, placeholder=" …")
-            print(f"#{rank}  score={hit.score:.4f}  {hit.doc_id} ({hit.locator})")
-            print(textwrap.indent(snippet, "    "))
-            print()
+            _print_hit(rank, hit, show_source=False)
     return 0
 
 
@@ -90,6 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_query = sub.add_parser("query", help="retrieve top-k chunks across both collections")
     p_query.add_argument("query", help="the natural-language query")
     p_query.add_argument("-k", "--top-k", type=int, default=None, help="number of results")
+    p_query.add_argument(
+        "--no-rerank",
+        action="store_true",
+        help="skip cross-encoder reranking; show domain-grouped results instead",
+    )
     p_query.set_defaults(func=_cmd_query)
 
     p_stats = sub.add_parser("stats", help="show per-collection statistics")

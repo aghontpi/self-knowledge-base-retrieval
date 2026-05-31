@@ -100,6 +100,19 @@ class Settings:
 
     top_k: int = field(default_factory=lambda: int(os.getenv("PRA_TOP_K", "5")))
 
+    # Reranking. A cross-encoder re-scores (query, chunk) pairs on one consistent
+    # scale, which fixes cross-model score incomparability and under-weighting of
+    # short snippets. Candidates are pulled per domain, then merged and reranked.
+    rerank_enabled: bool = field(
+        default_factory=lambda: os.getenv("PRA_RERANK", "1").lower() not in ("0", "false", "no")
+    )
+    rerank_model: str = field(
+        default_factory=lambda: os.getenv("PRA_RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    )
+    rerank_candidates: int = field(
+        default_factory=lambda: int(os.getenv("PRA_RERANK_CANDIDATES", "20"))
+    )
+
     def __post_init__(self) -> None:
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError(

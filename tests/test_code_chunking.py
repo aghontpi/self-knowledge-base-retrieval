@@ -59,7 +59,7 @@ def test_invalid_python_falls_back_to_line_window():
 
 def test_non_python_uses_line_window():
     java = "\n".join(f"int x{i} = {i};" for i in range(200))
-    chunks = _code([Block(java, "L1")], SETTINGS, suffix=".java")
+    chunks = _code(java, ".java")
     assert len(chunks) > 1  # 200 lines > code_max_lines
     assert all(c.locator.startswith("L") for c in chunks)
     assert [c.chunk_index for c in chunks] == list(range(len(chunks)))

@@ -43,9 +43,10 @@ class SearchHit:
     doc_id: str
     locator: str
     text: str
-    score: float
+    score: float            # retrieval (cosine) score, on the source model's scale
     chunk_index: int
-    source: str = ""  # which domain/collection produced the hit
+    source: str = ""        # which domain/collection produced the hit
+    rerank_score: float | None = None  # cross-encoder score (set when reranked)
 
 
 class MilvusStore:

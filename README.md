@@ -115,21 +115,32 @@ export PRA_DATA_DIR=/path/to/your/repo
 make ingest                 # converge both collections;  pra ingest -v  lists files
 make query Q="how is retry implemented?"
 pra query "..." -k 8        # override top-k
+pra query "..." --no-rerank # skip reranking; show domain-grouped results
 make stats                  # per-collection document/chunk counts
 ```
 
-Query output is tagged by domain:
+By default a **cross-encoder reranker** re-scores candidates from both
+collections on one consistent scale and returns a single ranked list:
 
 ```
-#1  [code]  score=0.71  utils/retry.py (L20-58)
+#1  [code]  rerank=7.82 (cos=0.71)  utils/retry.py (L20-58)
         def with_retry(fn, attempts=3): ...
-#2  [prose] score=0.66  README.md (Retries)
+#2  [prose] rerank=4.10 (cos=0.66)  README.md (Retries)
         Requests are retried with exponential backoff …
 ```
 
-> Cross-model scores aren't strictly comparable (a code-model 0.7 ≠ a bge 0.7).
-> The merge sorts by raw score as a pragmatic default; the `[source]` tag shows
-> which model ranked each hit.
+### Why rerank — cross-model scores aren't comparable
+
+The two domain models live on different scales: on a real corpus the code model
+handed out ~0.5–0.66 even to irrelevant hits while bge gave ~0.34–0.39 to
+perfect ones, so a raw-score merge let code bury prose. Two fixes ship:
+
+- **Grouping** (`--no-rerank`) — show `=== code ===` / `=== prose ===`
+  separately, each ranked on its own scale. Zero extra model.
+- **Reranking** (default) — a cross-encoder reads each `(query, chunk)` pair
+  *together* and scores them on one scale, so code and prose compete fairly.
+  Pulls `PRA_RERANK_CANDIDATES` per domain, then keeps the best `top_k`. Also
+  fixes the code model over-rewarding very short snippets.
 
 ## Updating the knowledge base
 
@@ -151,7 +162,8 @@ src/retrieval_assistant/
   embedding.py  Embedder per domain (model + optional query prefix), normalized
   store.py      Milvus Lite wrapper, one per collection
   ingest.py     convergent sync across both domains
-  search.py     embed query per model -> search both -> merge
+  search.py     query both -> grouped / merged / reranked results
+  rerank.py     cross-encoder second stage (one scale across domains)
   cli.py        argparse: ingest / query / stats
 ```
 
@@ -165,7 +177,9 @@ in `LICENSE` or `pyproject.toml`.
 
 - An answer stage (local model via Ollama, or an MCP server wrapping `search()`).
 - Optional upgrades once you eyeball results: tree-sitter for non-Python
-  structural chunking, OCR for scanned PDFs, a reranker over merged hits.
+  structural chunking, OCR for scanned PDFs, and a stronger reranker
+  (`BAAI/bge-reranker-base`) via `PRA_RERANK_MODEL` if the default isn't sharp
+  enough.
 
 ## License
 

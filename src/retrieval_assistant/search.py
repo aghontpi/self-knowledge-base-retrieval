@@ -39,10 +39,25 @@ def search_grouped(
 
 def search_merged(query: str, settings: Settings, top_k: int | None = None) -> list[SearchHit]:
     """Flat list across domains, sorted by raw score. Cross-model scores are not
-    strictly comparable — prefer :func:`search_grouped` for display."""
+    strictly comparable — prefer :func:`search_grouped` or :func:`search_reranked`."""
     k = top_k if top_k is not None else settings.top_k
     hits: list[SearchHit] = []
     for _, domain_hits in search_grouped(query, settings, top_k=k):
         hits.extend(domain_hits)
     hits.sort(key=lambda h: h.score, reverse=True)
     return hits[:k]
+
+
+def search_reranked(query: str, settings: Settings, top_k: int | None = None) -> list[SearchHit]:
+    """Unified ranked list: pull a wide net per domain, then cross-encoder rerank.
+
+    This is the recommended path when reranking is enabled — the cross-encoder
+    scores every candidate on one scale, so code and prose hits compete fairly.
+    """
+    from .rerank import Reranker
+
+    k = top_k if top_k is not None else settings.top_k
+    candidates: list[SearchHit] = []
+    for _, domain_hits in search_grouped(query, settings, top_k=settings.rerank_candidates):
+        candidates.extend(domain_hits)
+    return Reranker(settings).rerank(query, candidates, top_k=k)
