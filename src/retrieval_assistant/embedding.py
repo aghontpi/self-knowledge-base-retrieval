@@ -34,7 +34,15 @@ class Embedder:
         if self._model is None:
             from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer(self._domain.embedding_model)
+            model = SentenceTransformer(self._domain.embedding_model)
+            # Cap the input length. Long-context models (e.g. Qwen3, 32k) will
+            # otherwise try to build an attention buffer for the full sequence on
+            # an oversized chunk and blow up memory ("Invalid buffer size").
+            # Truncating to a sane window keeps memory bounded; chunks should be
+            # well under this anyway. The tokenizer truncates past this length.
+            if self._domain.max_seq_length:
+                model.max_seq_length = self._domain.max_seq_length
+            self._model = model
         return self._model
 
     def embed_documents(self, texts: list[str]) -> np.ndarray:

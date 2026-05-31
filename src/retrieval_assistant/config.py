@@ -57,6 +57,7 @@ class DomainConfig:
     embedding_model: str
     embedding_dim: int
     query_prefix: str = ""
+    max_seq_length: int = 512  # cap input tokens; guards long-context models from OOM
 
 
 @dataclass(frozen=True)
