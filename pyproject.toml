@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "personal-retrieval-assistant"
 version = "0.1.0"
-description = "Local, vector-only RAG over a mixed-format document corpus (Milvus Lite + local bge embeddings)."
+description = "Offline vector search and local RAG for messy notes and code. Zero hosting, zero cloud."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"

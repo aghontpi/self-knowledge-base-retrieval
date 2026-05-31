@@ -1,0 +1,83 @@
+@startuml
+skinparam monochrome false
+skinparam packageStyle rect
+skinparam shadowing false
+skinparam defaultFontName "Helvetica"
+skinparam defaultFontSize 12
+
+' Define warm premium color palette
+!define PRIMARY #2E4057
+!define SECONDARY #8D99AE
+!define ACCENT #EF233C
+!define LIGHT #F8F9FA
+!define DARK #212529
+
+skinparam Activity {
+  BackgroundColor LIGHT
+  BorderColor PRIMARY
+  FontColor DARK
+  ArrowColor PRIMARY
+}
+
+skinparam Database {
+  BackgroundColor LIGHT
+  BorderColor PRIMARY
+  FontColor DARK
+}
+
+skinparam Partition {
+  BorderColor SECONDARY
+  BackgroundColor #F1F3F5
+}
+
+start
+
+partition "1. File Selection & Sniffing" {
+  :Active Corpus Directory;
+  if (Is Git Repo?) then (yes)
+    :Run 'git ls-files' (Tracked only);
+  else (no)
+    :Walk Directory Tree;
+  endif
+  :Route by Extension / Filename;
+  :Apply Size Cap Guard (1 MB);
+  :Run Null-Byte & UTF-8 sniffer\n(Exclude misidentified binaries);
+}
+
+partition "2. Multi-Domain Routing" {
+  if (Domain Routing) then (Prose)
+    :Parse PDF / DOCX / MD / CSV / Text;
+    :Prose Chunking\n(Char window + overlap);
+    :Embed Chunks\n(BAAI/bge-small-en-v1.5);
+    :Store in Prose Collection;
+  else (Code)
+    :Parse Source Files / Notebooks;
+    if (File Type) then (Python)
+      :AST Parser\n(Def / Class chunks + preamble);
+    else (Other Code)
+      :Line window + overlap;
+    endif
+    :Embed Chunks\n(ibm-granite/granite-embedding-311m-multilingual-r2);
+    :Store in Code Collection;
+  endif
+}
+
+partition "3. Convergent Synchronizer" {
+  :Compare sha256 file hashes;
+  :New files -> Insert chunks\nChanged -> Delete + Re-insert\nRemoved -> Clean up;
+}
+
+partition "4. Query & Unified Search" {
+  :Query string;
+  fork
+    :Prose Vector Search\n(bge-small);
+  fork again
+    :Code Vector Search\n(granite-embedding);
+  end fork
+  :Merge Candidate Lists;
+  :Cross-Encoder Reranker\n(ms-marco-MiniLM-L-6-v2);
+  :Unified Top-K Ranked Chunks;
+}
+
+stop
+@enduml

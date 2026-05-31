@@ -2,7 +2,7 @@
 
 # Self Knowledge Base Retrieval For Humans and AI
 
-Local, vector-only RAG over a mixed-format document corpus. No server, no orchestration framework, no cloud.
+Offline vector search and local RAG for messy notes and code. Zero hosting, zero cloud.
 
 <p>
   <a href="https://github.com/aghontpi/self-knowledge-base-retrieval/blob/main/LICENSE"><img src="https://img.shields.io/github/license/aghontpi/self-knowledge-base-retrieval?style=flat-square" alt="license"></a>
@@ -10,7 +10,7 @@ Local, vector-only RAG over a mixed-format document corpus. No server, no orches
 
 </div>
 
-## Why
+## Motivation
 
 > I have a lot of notes I maintain over the years from 2016, its a collection of different fileformats, I wanted something that can query locally and find it without doing find in files all the time, although find in files is still good, lol. 
 > 
@@ -18,10 +18,9 @@ Local, vector-only RAG over a mixed-format document corpus. No server, no orches
 
 Files are selected, parsed, chunked, embedded with local models, and stored in **[Milvus Lite](https://milvus.io/docs/milvus_lite.md)** (an embedded `.db` file). Ingestion is **convergent**: re-running it makes the index match the corpus exactly — that is the entire "update the knowledge base" story.
 
-The corpus is heterogeneous (prose **and** code), so the index is split into two
-**domains**, each with its own collection and embedding model:
+Because personal notes and code are very different, we split the index into two collections, each running its own model:
 
-| domain | content | model |
+| type | content | model |
 |---|---|---|
 | **prose** | markdown, text, PDF, docx, CSV, config | `BAAI/bge-small-en-v1.5` (384-d) |
 | **code** | source files, notebooks | `ibm-granite/granite-embedding-311m-multilingual-r2` (768-d) |
@@ -30,37 +29,11 @@ Vectors from different models aren't comparable, so they live in separate
 collections. A query is embedded with each model, searched against each
 collection, and the hits are merged.
 
-Retrieval is built and verified *first* — no answer-generating LLM is wired in
-yet. Eyeball the retrieved chunks before trusting generation on top of them.
+Retrieval is built and verified — use the MCP server to interact with this when connecting with LLMs or AI agents.
 
-## Pipeline
+## Architecture
 
-```mermaid
-flowchart TB
-    A[data dir / git repo] --> D[discover]
-    subgraph D [file selection]
-        direction TB
-        D1[git ls-files<br/>tracked only] --> D2[route by name<br/>domain + kind]
-        D2 --> D3[size cap +<br/>binary sniff]
-    end
-    D --> R{route.domain}
-
-    R -->|prose| P[parse: pdf/docx/md/csv/text]
-    R -->|code| C[parse: source / notebook]
-
-    P --> PC[chunk: char window+overlap<br/>· rows for CSV · headings for md]
-    C --> CC[chunk: Python AST by def/class<br/>· line window for other langs]
-
-    PC --> PE[embed: bge-small] --> PS[(prose collection)]
-    CC --> CE[embed: code model] --> CS[(code collection)]
-
-    Q[query] --> QE[embed with each model]
-    QE --> PS
-    QE --> CS
-    PS --> M[merge by score, tag source]
-    CS --> M
-    M --> H[ranked chunks]
-```
+![Architecture](docs/architecture.png)
 
 ## File selection — the part that matters for a messy corpus
 
@@ -153,49 +126,9 @@ perfect ones, so a raw-score merge let code bury prose. Two fixes ship:
   Pulls `PRA_RERANK_CANDIDATES` per domain, then keeps the best `top_k`. Also
   fixes the code model over-rewarding very short snippets.
 
-## Updating the knowledge base
-
-There is no separate "update" step — **just run `pra ingest` again.** Add, edit,
-or delete files in the corpus and re-ingest; each collection converges to match.
-To change a domain's embedding model, drop that collection (or delete the `.db`)
-and re-ingest — vectors from different models aren't comparable, so it's a
-rebuild, not an update.
-
 ## Model Context Protocol (MCP) Server
 
-The Personal Retrieval Assistant includes a **Model Context Protocol (MCP)** server. This allows LLM clients (such as Claude Desktop, Cursor, or other MCP-compatible clients) to query and manage your local vector search database.
-
-### Key Features
-
-* **Fast Subprocess Boot (<10ms):** Heavy models (embeddings and cross-encoders) and libraries like PyTorch are lazy-loaded when tools are first called. This prevents connection timeouts during LLM client startup.
-* **OS-Level DB Locking (`filelock`):** Milvus Lite uses an in-process database file. Simultaneous reads and writes from different clients are serialized using an OS-level file lock to prevent database corruption.
-* **Apple Silicon Sandbox Safety (Strict CPU Execution):** Neural network layers run on the `cpu` to prevent Metal Performance Shaders (MPS) sandbox segmentation faults inside restricted environments.
-* **Path Traversal Protection:** Direct file reading is protected by a path containment resolver (`secure_resolve`) to ensure target files reside within the configured `PRA_DATA_DIR`.
-
----
-
-### Exposed Tools & Resources
-
-#### Tools
-* **`pra_search(query, top_k)`**: Semantic search across both prose and code collections, merged and re-scored with the local cross-encoder.
-  * `query` *(string)*: Natural language question or search query.
-  * `top_k` *(integer, optional, default: 5)*: Number of ranked results to return (clamped between `1` and `50`).
-* **`pra_ingest()`**: Scans your active corpus directory, calculates SHA256 hashes, and converges the local database index to match the filesystem.
-* **`pra_stats()`**: Returns diagnostic database statistics, active models, collection names, and total chunk counts.
-* **`pra_get_file(doc_id)`**: Reads the raw text content of an indexed file (clamped at `500KB` max to protect memory) with strict path containment checks.
-  * `doc_id` *(string)*: Relative file path identifier (e.g., `src/utils.py`).
-
-#### Resources
-* **`pra://settings`**: Exposes the active RAG configuration settings (data directory, SQLite path, chunk limits, active models) as a read-only JSON payload.
-
----
-
-### Integration & Setup
-
-#### 1. Claude Desktop Configuration
-To register the assistant as a tool provider in **Claude Desktop**, add the following block to your configuration file:
-
-* **File Path:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+To add this as an MCP server to your Claude Desktop configuration (or other MCP clients), register it with the following JSON configuration:
 
 ```json
 {
@@ -220,21 +153,15 @@ To register the assistant as a tool provider in **Claude Desktop**, add the foll
 > * Replace `/path/to/personal-retrieval-assistant` with the absolute path to your cloned repository.
 > * Replace `/path/to/your/corpus` with the directory you want the assistant to index and search.
 
-#### 2. Interactive Testing & Local Debugging
-You can interactively test, trace, and execute all the tools and resources using the official MCP Developer Tools (`mcp dev`) or the MCP Inspector.
-
-**Using FastMCP's Built-in Inspector:**
-```bash
-# Activate the virtual environment
-source .venv/bin/activate
-
-# Launch the interactive web inspector
-mcp dev -w src/retrieval_assistant/mcp_server.py
-```
-
-This starts a local developer server and opens a web console allowing you to run `pra_search`, trigger `pra_ingest`, and view stats inside a GUI.
-
 ---
+
+## Updating the knowledge base
+
+There is no separate "update" step — **just run `pra ingest` again.** Add, edit,
+or delete files in the corpus and re-ingest; each collection converges to match.
+To change a domain's embedding model, drop that collection (or delete the `.db`)
+and re-ingest — vectors from different models aren't comparable, so it's a
+rebuild, not an update.
 
 ## React Web UI & FastAPI Backend
 
@@ -257,7 +184,11 @@ The Personal Retrieval Assistant includes a **React TypeScript Web UI Dashboard*
   [bge-small / Milvus Lite]      [granite-embed / Milvus Lite]
 ```
 
-### UI Dashboard Features
+### UI to debug along with mcp
+
+<p>
+  <img src="docs/ui.png" width="700" alt="PRA Console UI">
+</p>
 
 * **System Status & Diagnostics:** View local vector index details, including the database file path, data directories, active embedding models, total indexed files, and chunk counts.
 * **Indexing Log:** Trigger a sync directly from the web interface and view real-time log output as files are processed.
@@ -277,7 +208,7 @@ The backend is built with **FastAPI** and served using **Uvicorn**.
 
 ---
 
-### Setup & Launch Instructions
+### Development
 
 #### 1. Compile the React Frontend Assets
 The React dashboard is written using **React 19**, **TypeScript**, and **Vite**. The compiled assets must be bundled and placed inside the backend's static directory.
@@ -333,7 +264,7 @@ pnpm run dev
 
 ---
 
-## Layout
+## Folder structure
 
 ```
 src/retrieval_assistant/
@@ -351,11 +282,10 @@ src/retrieval_assistant/
   cli.py        argparse: ingest / query / stats
 ```
 
-## Privacy & git hygiene
+## Privacy
 
-Corpus, the Milvus `.db`, and `.env` are gitignored. The `.db` records local
-absolute paths but never reaches the repo. Nothing personal (name, email) appears
-in `LICENSE` or `pyproject.toml`.
+The Milvus `.db` and `.env` are gitignored. The `.db` records local
+absolute paths but never reaches the repo.
 
 ## License
 
